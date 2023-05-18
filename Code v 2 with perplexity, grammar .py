@@ -56,8 +56,11 @@ dataset["is_ai_generated"] = dataset["ai_generated"].apply(lambda x: 1 if x else
 
 
 
+removed1 = dataset[dataset['abstract'].str.contains('Unfortunately',regex=False) & dataset["ai_generated"] == 1]
+dataset = dataset.drop(removed1.index)
 
-
+removed2 = dataset[dataset['abstract'].str.len() < 500]
+dataset = dataset.drop(removed2.index)
 
 ## maybe remove citations for human generated (et al)
 ## maybe remove $ and ^ if there are more than 5 in the text 
@@ -235,17 +238,18 @@ def grammar_score(text):
     return errors / len(text.split())
 
 def calculate_grammar_scores(df, text_column="abstract"):
+    
     texts = df[text_column].tolist()
     grammar_scores = [grammar_score(text) for text in texts]
     df["Grammar Score"] = grammar_scores
     return df
 
-df_with_grammar_scores = calculate_grammar_scores(dataset)
+dataset_with_perplexity = calculate_grammar_scores(dataset_with_perplexity)
 
 
 
 plt.figure(figsize=(10, 6))
-ax = sns.boxplot(x="is_ai_generated", y="Grammar Score", data=df_with_grammar_scores,showfliers = False) ##REMOVED OUTLIERS!! 
+ax = sns.boxplot(x="is_ai_generated", y="Grammar Score", data=dataset_with_perplexity,showfliers = False) ##REMOVED OUTLIERS!! 
 #ax = sns.boxplot(x="is_ai_generated", y="Grammar Score", data=df_with_grammar_scores)  
 ax.set_xticklabels(["Human-generated", "AI-generated"])
 ax.set_xlabel("Text Type")
@@ -264,77 +268,20 @@ plt.show()
 ##
 
 
-def calculate_ttr(dataset):
-    ttrs = []
-    for index, row in dataset.iterrows():
-        text = row['abstract']
-        
-        tokens = word_tokenize(text.lower())
-        types = set(tokens) #create a set of unique tokens
-        
-        if len(tokens) == 0:
-            ttrs.append(None)
-        else:
-            #The TTR score is calculated by dividing the number of types by the total number of tokens.
-            ttr = len(types) / len(tokens)
-            ttrs.append(ttr)
-    
-    return ttrs
-
-def calculate_all_tokens(dataset):
-    all_tokens = []
-    for index, row in dataset.iterrows():
-        text = row['abstract']
-        tokens = word_tokenize(text.lower())
-        all_tokens.extend(tokens)
-    return all_tokens
-
-def calculate_all_tokens_ngrams(dataset, n):
-    all_ngrams = []
-    for index, row in dataset.iterrows():
-        text = row['abstract']
-        tokens = word_tokenize(text.lower())
-        text_ngrams = list(ngrams(tokens, n))
-        all_ngrams.extend(text_ngrams)
-
-    return all_ngrams
-
-
-
-def calculate_ttr_all_texts(dataset):
-    all_tokens = calculate_all_tokens(dataset)
-
-    types = set(all_tokens)  # Create a set of unique tokens from all texts
-
-    ttrs = []
-    for index, row in dataset.iterrows():
-        text = row['abstract']
-        tokens = word_tokenize(text.lower())
-
-        if len(tokens) == 0:
-            ttrs.append(None)
-        else:
-            unique_token_count = sum(1 for token in types if token in tokens)
-            ttr = unique_token_count / len(tokens)
-            ttrs.append(ttr)
-    
-    return ttrs
 
 def calculate_ttr_all_ngrams(dataset, n=2):
-    all_ngrams = calculate_all_tokens_ngrams(dataset, n)
-
-    types = set(all_ngrams)  # Create a set of unique n-grams from all texts
-
     ttrs = []
     for index, row in dataset.iterrows():
         text = row['abstract']
         tokens = word_tokenize(text.lower())
         text_ngrams = list(ngrams(tokens, n))
+        types = set(text_ngrams)  # create a set of unique n-grams
 
         if len(text_ngrams) == 0:
             ttrs.append(None)
+            print('none')
         else:
-            unique_ngram_count = sum(1 for ngram in types if ngram in text_ngrams)
+            unique_ngram_count = len(types)
             ttr = unique_ngram_count / len(text_ngrams)
             ttrs.append(ttr)
     
@@ -356,31 +303,11 @@ def plot_ttr_histogram_ngrams(dataset, ai_generated, n=1):
     plt.ylabel('Frequency')
     plt.show()
     
-def plot_ttr_histogram_tokens(dataset, ai_generated):
-    if ai_generated:
-        color = 'red'
-        title = f'Type-Token Ratio Histogram - tokens (AI-Generated Abstracts)'
-    else:
-        color = 'green'
-        title = f'Type-Token Ratio Histogram -tokens (Human-Generated Abstracts)'
-
-    ttrs = calculate_ttr_all_texts(dataset)
-
-    plt.hist(ttrs, bins=20, color=color, edgecolor='black')
-    plt.title(title)
-    plt.xlabel('TTR')
-    plt.ylabel('Frequency')
-    plt.show()    
-
 
 # Plotting
 
 human_abstracts = dataset.loc[dataset['is_ai_generated'] == False]
 ai_abstracts = dataset.loc[dataset['is_ai_generated'] == True]
-
-# Plot TTR histograms based on tokens
-plot_ttr_histogram_tokens(human_abstracts, ai_generated=False)
-plot_ttr_histogram_tokens(ai_abstracts, ai_generated=True)
 
 # Plot TTR histograms based on n-grams (1-5)
 for n in range(1, 4):
@@ -388,18 +315,9 @@ for n in range(1, 4):
     plot_ttr_histogram_ngrams(human_abstracts, ai_generated=False, n=n)
     plot_ttr_histogram_ngrams(ai_abstracts, ai_generated=True, n=n)
 
-
-
-# ------------------------------------------- SpaCy -------------------------------------------------------------#
-#cython: auto_pickle=False 
-#import sys; print(sys.implementation)
-
-#import spacy
-
-#nlp = spacy.load("en_core_web_sm")
-#doc = nlp("Apple is looking at buying U.K. startup for $1 billion")
-#for token in doc:
-#    print(token.text, token.pos_, token.dep_)
+dataset_with_perplexity['TTR_1ngram'] = calculate_ttr_all_ngrams(dataset_with_perplexity, n=1)
+dataset_with_perplexity['TTR_2ngram'] = calculate_ttr_all_ngrams(dataset_with_perplexity, n=2)
+dataset_with_perplexity['TTR_3ngram'] = calculate_ttr_all_ngrams(dataset_with_perplexity, n=3)
 
 
 # ------------------------------------------- AVG Word Lenght -------------------------------------------------------------#
@@ -425,6 +343,23 @@ def calculate_avg_word_length(dataset, ai_generated):
 human_avg_lengths = calculate_avg_word_length(dataset, ai_generated=False)
 ai_avg_lengths = calculate_avg_word_length(dataset, ai_generated=True)
 
+def calculate_avg_word_length_all(dataset):
+    filtered_dataset = dataset
+
+    word_lengths = []
+    for index, row in filtered_dataset.iterrows():
+        text = row['abstract']
+        #tokens = word_tokenize(text.lower()) #TOKENS
+        tokens = text.split() # SPLIT by spaces 
+
+        lengths = [len(token) for token in tokens]
+        avg_length = sum(lengths) / len(lengths)
+        word_lengths.append(avg_length)
+                
+    return word_lengths
+
+dataset_with_perplexity['Average word length'] = calculate_avg_word_length_all(dataset_with_perplexity)
+
 plt.hist(human_avg_lengths, bins=20, color='green', edgecolor='black')
 plt.title('Average Word Length Histogram (Human-Generated Abstracts)')
 plt.xlabel('Average Word Length')
@@ -436,6 +371,49 @@ plt.title('Average Word Length Histogram (AI-Generated Abstracts)')
 plt.xlabel('Average Word Length')
 plt.ylabel('Frequency')
 plt.show()
+
+
+#------------------------------------------------------ Frequency of function words ---------------------------------------------------#
+import nltk
+nltk.download('punkt')
+nltk.download('stopwords')
+
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+def calculate_function_words(dataset):
+    function_words = set(stopwords.words('english'))  # NLTK's corpus of English stopwords
+    freqs = []
+    
+    for index, row in dataset.iterrows():
+        text = row['abstract']
+        tokens = word_tokenize(text.lower())
+        func_word_count = sum(1 for token in tokens if token in function_words)
+        freq = func_word_count / len(tokens) if tokens else 0
+        freqs.append(freq)
+
+    # Add Frequencies as a new column in the dataset
+    dataset['frequency_of_function_words'] = freqs
+    
+    return dataset
+
+def plot_distribution(dataset):
+    # Create a copy of the dataset to avoid modifying the original one
+    dataset_copy = dataset.copy()
+
+    # Map 1 to 'AI' and 0 to 'Human'
+    dataset_copy['source'] = dataset['is_ai_generated'].map({1: 'AI', 0: 'Human'})
+
+    plt.figure(figsize=(10, 6))
+    sns.boxplot(x='source', y='frequency_of_function_words', data=dataset_copy)
+    plt.title('Distribution of Function Word Frequencies: AI vs Human')
+    plt.show()
+
+
+dataset_with_perplexity = calculate_function_words(dataset_with_perplexity)
+plot_distribution(dataset_with_perplexity)
 
 #------------------------------------------------------ Modelling ---------------------------------------------------#
 
@@ -629,82 +607,152 @@ if isinstance(best_estimator.named_steps['classifier'], DummyClassifier):
     
 
 
+#------------------------------------------------------ Modelling without text---------------------------------------------------#
+
+import pandas as pd
+import string
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import FunctionTransformer
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.dummy import DummyClassifier
+from sklearn.naive_bayes import MultinomialNB
+import string
+import re
+from nltk.corpus import stopwords
+#nltk.download('stopwords')
+from nltk.stem import WordNetLemmatizer
+#nltk.download('wordnet')
+#nltk.download('omw-1.4')
 
 
 
+# Split the data into training, validation, and testing sets
+X = dataset_with_perplexity['frequency_of_function_words', 'Average word length', 'TTR_1ngram','TTR_2ngram','TTR_3ngram', 'Grammar Score', 'Perplexity']
+y = dataset_with_perplexity["is_ai_generated"]
+
+X_train, X_val_test, y_train, y_val_test = train_test_split(X, y, test_size=0.3, random_state=42)
+X_val, X_test, y_val, y_test = train_test_split(X_val_test, y_val_test, test_size=0.5, random_state=42)
 
 
-    
-#--------------------------Distilbert-----------------------------------------------#
+# Create a pipeline
+pipeline = Pipeline([
+    ('classifier', LogisticRegression())
+])
 
+# Define the parameter grid for GridSearchCV
 
-
-from sklearn.metrics import classification_report
-from transformers import DistilBertForSequenceClassification, DistilBertTokenizer
-from transformers import TrainingArguments
-from transformers import Trainer
-from datasets import Dataset
-
-
-tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased', num_labels=2)
-# Train-test-validation split
-
-train_df, test_val_df = train_test_split(dataset, test_size=0.3, stratify=dataset["is_ai_generated"], random_state=42)
-val_df, test_df = train_test_split(test_val_df, test_size=0.5, stratify=test_val_df["is_ai_generated"], random_state=42)
-
-# Convert the DataFrames to HuggingFace's Dataset format
-train_dataset = Dataset.from_pandas(train_df)
-val_dataset = Dataset.from_pandas(val_df)
-test_dataset = Dataset.from_pandas(test_df)
-
-print(train_dataset.column_names)
-print(train_dataset)
-
-# Tokenize the input text
-def tokenize(batch):
-    return {
-        **tokenizer(batch['abstract'], padding='max_length', truncation=True, max_length=512, return_tensors='pt'),
-        'labels': batch['is_ai_generated']
+# tfidf__max_df -- Ignores terms that appear in more than 90% or 100% of the documents --> is used to remove terms that appear too frequently, also know as corpus-specific stop words
+# 'tfidf__ngram_range' -- The lower and upper boundry of the range if n-values for different n-grams. fx 1,2 means uni and bi grams 
+# Logistic C values -- Inverse reguliarization strengh: used to reduce the complexity of the prectition function: makes the model simpler. High c means we trust training data 
+# Classifier penalty / solver Logistic Regression - we use L2 (ridge) - In the Lasso method, the coefficients can be reduced to exactly zero, while in the Ridge method, they are only made smaller but not reduced to zero.
+# Random forrest - N estimator - the number of trees in the forest (default 100) / Max depth - the maxiumum depth of trees, 
+# Dummy classifier only one strategy as this is a baseline method - most frequent
+# MultinomialNB Naive bayes - Alpha - smoothing parameter - set to default, used to handle zero probablity instances 
+param_grid = [
+    {
+        'classifier': [LogisticRegression()],
+        'classifier__C': [0.1, 1, 10, 100],
+        'classifier__penalty': ['l2','l1'],
+        'classifier__solver': ['liblinear','lbfgs']
+    },
+    {
+        'classifier': [RandomForestClassifier()],
+        'classifier__n_estimators': [50, 100, 200],
+        'classifier__max_depth': [None, 20, 50, 100],
+    },
+    {
+        'classifier': [DummyClassifier()],
+        'classifier__strategy': ['most_frequent']
+    },
+    {
+        'classifier': [MultinomialNB()]
     }
+]
 
+# Perform a grid search with cross-validation #high presision
+grid_search = GridSearchCV(pipeline, param_grid, scoring='precision', cv=5, n_jobs=-1,verbose=5)
+grid_search.fit(X_train, y_train)
 
+# Print the best combination of hyperparameters
+print("Best parameters: ", grid_search.best_params_)
 
-train_dataset = train_dataset.map(tokenize, batched=True, remove_columns=['abstract', 'ai_generated'])
-val_dataset = val_dataset.map(tokenize, batched=True, remove_columns=['abstract', 'ai_generated'])
-test_dataset = test_dataset.map(tokenize, batched=True, remove_columns=['abstract', 'ai_generated'])
+# Evaluate the model on Train data
+y_train_pred = grid_search.predict(X_train)
+print("Validation Classification Report:\n", classification_report(y_train, y_train_pred))
 
-# Set the dataset format to PyTorch tensors
-train_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
-val_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
-test_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
+# Evaluate the model on  data
+y_val_pred = grid_search.predict(X_val)
+print("Validation Classification Report:\n", classification_report(y_val, y_val_pred))
 
-# Create the training arguments
-training_args = TrainingArguments(
-    output_dir="./results",
-    num_train_epochs=3,
-    per_device_train_batch_size=1,
-    per_device_eval_batch_size=1,
-    warmup_steps=500,
-    weight_decay=0.01,
-    logging_dir="./logs",
-    logging_steps=10,
-    evaluation_strategy="steps",
-    eval_steps=100,
-)
+results = grid_search.cv_results_
+# Initialize empty lists for each model
+rf_params = []
+lr_params = []
+dummy_params = []
+Multi_params = []
 
-# Create the Trainer
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=train_dataset,
-    eval_dataset=val_dataset
-)
+# Loop over each set of parameters in the GridSearchCV results
+for i, params in enumerate(results["params"]):
+    if isinstance(params["classifier"], RandomForestClassifier):
+        # Add the best parameters for the Random Forest model to the list
+        best_params = {"params": params, "mean_test_score": results["mean_test_score"][i]}
+        rf_params.append(best_params)
+    elif isinstance(params["classifier"], LogisticRegression):
+        # Add the best parameters for the Logistic Regression model to the list
+        best_params = {"params": params, "mean_test_score": results["mean_test_score"][i]}
+        lr_params.append(best_params)
+    elif isinstance(params["classifier"], DummyClassifier):
+        # Add the best parameters for the Dummy Classifier model to the list
+        best_params = {"params": params, "mean_test_score": results["mean_test_score"][i]}
+        dummy_params.append(best_params)
+    elif isinstance(params["classifier"], MultinomialNB):
+        # Add the best parameters for the Dummy Classifier model to the list
+        best_params = {"params": params, "mean_test_score": results["mean_test_score"][i]}
+        Multi_params.append(best_params)
 
-# Train the model
-trainer.train()
+# Sort the best parameters by mean test score in descending order
+rf_params = sorted(rf_params, key=lambda x: x["mean_test_score"], reverse=True)[:1]
+lr_params = sorted(lr_params, key=lambda x: x["mean_test_score"], reverse=True)[:1]
+dummy_params = sorted(dummy_params, key=lambda x: x["mean_test_score"], reverse=True)[:1]
+Multi_params = sorted(Multi_params, key=lambda x: x["mean_test_score"], reverse=True)[:1]
 
-# Evaluate the model on validation data
-val_predictions = trainer.predict(val_dataset)
-val_preds = np.argmax(val_predictions.predictions, axis=1)
-print("Validation Classification Report:\n", classification_report(y_val, val_preds))
+# Create a DataFrame with the best parameters for each model
+best_params_df = pd.DataFrame({
+    "model": ["Random Forest", "Logistic Regression", "Dummy Classifier", "MultinomialNB"],
+    "best_params": [rf_params[0]["params"], lr_params[0]["params"], dummy_params[0]["params"],Multi_params[0]["params"]],
+    "mean_test_score": [rf_params[0]["mean_test_score"], lr_params[0]["mean_test_score"], dummy_params[0]["mean_test_score"], Multi_params[0]["mean_test_score"]]
+})
+
+print(best_params_df)
+
+best_estimator = grid_search.best_estimator_
+print(best_estimator.named_steps['classifier'])
+
+# Extract the feature importances from the Random Forest Classifier
+if isinstance(best_estimator.named_steps['classifier'], RandomForestClassifier):
+    rf = best_estimator.named_steps['classifier']
+    feature_importances = pd.Series(rf.feature_importances_, index=best_estimator.named_steps['tfidf'].get_feature_names_out())
+    feature_importances.nlargest(20).plot(kind='barh')
+
+if isinstance(best_estimator.named_steps['classifier'], LogisticRegression):
+    lr = best_estimator.named_steps['classifier']
+    feature_importances = pd.Series(lr.coef_[0], index=best_estimator.named_steps['tfidf'].get_feature_names_out())
+    feature_importances.nlargest(20).plot(kind='barh')
+
+if isinstance(best_estimator.named_steps['classifier'], MultinomialNB):
+    nb = best_estimator.named_steps['classifier']
+    feature_probabilities = pd.DataFrame(nb.feature_log_prob_.T, columns=['class_0', 'class_1'], index=best_estimator.named_steps['tfidf'].get_feature_names_out())
+    feature_probabilities['diff'] = feature_probabilities['class_1'] - feature_probabilities['class_0']
+    feature_probabilities.nlargest(20, 'diff').plot(kind='barh')
+
+if isinstance(best_estimator.named_steps['classifier'], DummyClassifier):
+    feature_importances = pd.Series([1], index=['dummy'])
+    feature_importances.plot(kind='barh')
+    
+    
+    
