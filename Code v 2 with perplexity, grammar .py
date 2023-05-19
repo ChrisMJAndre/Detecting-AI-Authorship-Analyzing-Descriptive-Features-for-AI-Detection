@@ -500,9 +500,9 @@ param_grid = [
         'tfidf__max_df': [0.9, 1.0],
         'tfidf__ngram_range': [(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)],
         'classifier': [LogisticRegression()],
-        'classifier__C': [0.1, 1, 10, 100],
+        'classifier__C': [0.1, 1, 10],
         'classifier__penalty': ['l2','l1'],
-        'classifier__solver': ['liblinear','lbfgs']
+        'classifier__solver': ['liblinear']
     },
     {
         'tfidf__max_df': [0.9, 1.0],
@@ -510,12 +510,11 @@ param_grid = [
         'classifier': [RandomForestClassifier()],
         'classifier__n_estimators': [50, 100, 200],
         'classifier__max_depth': [None, 20, 50, 100],
+        'classifier__min_samples_split': [10,50,100]
     },
     {
-        'tfidf__max_df': [0.9, 1.0],
-        'tfidf__ngram_range': [(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)],
         'classifier': [DummyClassifier()],
-        'classifier__strategy': ['most_frequent']
+        'classifier__strategy': ['most_frequent','uniform']
     },
     {
         'tfidf__max_df': [0.9, 1.0],
@@ -530,6 +529,128 @@ grid_search.fit(X_train, y_train)
 
 # Print the best combination of hyperparameters
 print("Best parameters: ", grid_search.best_params_)
+
+from sklearn.metrics import precision_score, recall_score, accuracy_score, f1_score
+# Define the models and their parameters
+models = [
+    {
+     'name': 'Random Forest',
+     'params': {'classifier': RandomForestClassifier(max_depth=None, min_samples_split=10, n_estimators=50),'tfidf__ngram_range': (5, 6),'tfidf__max_df': 0.9 }
+     },
+    {
+     'name': 'Logistic Regression',
+     'params': {'classifier': LogisticRegression(C=0.1, penalty='l1', solver='liblinear'),'tfidf__ngram_range': (5, 6),'tfidf__max_df': 0.9}
+     },
+    {
+     'name': 'Dummy Classifier',
+     'params': {'classifier': DummyClassifier(strategy='uniform')}
+     },
+    {
+     'name': 'MultinomialNB',
+     'params': {'classifier': MultinomialNB(),'tfidf__ngram_range': (6, 7),'tfidf__max_df': 0.9}
+     }
+]
+
+# Import additional modules
+from sklearn.base import clone
+
+# Get the best configurations for each model from the grid search
+best_params = grid_search.cv_results_['params'][grid_search.best_index_]
+
+# Split the data into train, validation, and test sets
+X_train, X_val_test, y_train, y_val_test = train_test_split(X, y, test_size=0.3, random_state=42)
+X_val, X_test, y_val, y_test = train_test_split(X_val_test, y_val_test, test_size=0.5, random_state=42)
+
+# Create a pandas DataFrame to store the results
+results_df = pd.DataFrame(columns=['Model', 'Set', 'Accuracy', 'Precision', 'Recall', 'F1-score'])
+
+# Function to evaluate a model and store the results in the DataFrame
+def evaluate_model(model_name, model, X, y, set_name):
+    y_pred = model.predict(X)
+    accuracy = accuracy_score(y, y_pred)
+    precision = precision_score(y, y_pred)
+    recall = recall_score(y, y_pred)
+    f1 = f1_score(y, y_pred)
+
+    results_df.loc[len(results_df)] = [model_name, set_name, accuracy, precision, recall, f1]
+
+# Iterate over each model and evaluate them on the train, validation, and test sets
+for model_info in models:
+    model_name = model_info['name']
+    model_params = best_params[model_name] if model_name in best_params else {}
+
+    pipeline = Pipeline([
+        ('text_normalizer', FunctionTransformer(text_normalizer, validate=False)),
+        ('tfidf', TfidfVectorizer(max_df=model_params.get('tfidf__max_df', 1.0), 
+                                  ngram_range=model_params.get('tfidf__ngram_range', (1,1)))),
+        ('classifier', clone(model_info['params']['classifier']).set_params(**model_params))
+    ])
+
+    # Train the model
+    pipeline.fit(X_train, y_train)
+
+    # Evaluate on the train set
+    evaluate_model(model_name, pipeline, X_train, y_train, 'Train')
+
+    # Evaluate on the validation set
+    evaluate_model(model_name, pipeline, X_val, y_val, 'Validation')
+
+    # Evaluate on the test set
+    evaluate_model(model_name, pipeline, X_test, y_test, 'Test')
+
+# Print the results
+print(results_df)
+
+
+
+
+
+
+# Split the data into train, validation, and test sets
+X_train, X_val_test, y_train, y_val_test = train_test_split(X, y, test_size=0.3, random_state=42)
+X_val, X_test, y_val, y_test = train_test_split(X_val_test, y_val_test, test_size=0.5, random_state=42)
+
+
+
+# Create a pandas DataFrame to store the results
+results_df = pd.DataFrame(columns=['Model', 'Set', 'Accuracy', 'Precision', 'Recall', 'F1-score'])
+
+
+
+# Function to evaluate a model and store the results in the DataFrame
+def evaluate_model(model_name, model, X, y, set_name):
+    y_pred = model.predict(X)
+    accuracy = accuracy_score(y, y_pred)
+    precision = precision_score(y, y_pred)
+    recall = recall_score(y, y_pred)
+    f1 = f1_score(y, y_pred)
+
+    results_df.loc[len(results_df)] = [model_name, set_name, accuracy, precision, recall, f1]
+
+
+
+# Iterate over each model and evaluate them on the train, validation, and test sets
+for model_info in models:
+    model_name = model_info['name']
+    model_params = model_info['params']
+    model = model_params['classifier']
+
+    # Train the model
+    model.fit(X_train, y_train)
+
+    # Evaluate on the train set
+    evaluate_model(model_name, model, X_train, y_train, 'Train')
+
+    # Evaluate on the validation set
+    evaluate_model(model_name, model, X_val, y_val, 'Validation')
+
+    # Evaluate on the test set
+    evaluate_model(model_name, model, X_test, y_test, 'Test')
+
+
+
+# Print the results
+print(results_df)
 
 # Evaluate the model on Train data
 y_train_pred = grid_search.predict(X_train)
@@ -632,11 +753,12 @@ from nltk.stem import WordNetLemmatizer
 
 
 # Split the data into training, validation, and testing sets
-X = dataset_with_perplexity['frequency_of_function_words', 'Average word length', 'TTR_1ngram','TTR_2ngram','TTR_3ngram', 'Grammar Score', 'Perplexity']
+X = dataset_with_perplexity[['frequency_of_function_words', 'Average word length', 'TTR_1ngram','TTR_2ngram','TTR_3ngram', 'Grammar Score', 'Perplexity']]
 y = dataset_with_perplexity["is_ai_generated"]
 
-X_train, X_val_test, y_train, y_val_test = train_test_split(X, y, test_size=0.3, random_state=42)
-X_val, X_test, y_val, y_test = train_test_split(X_val_test, y_val_test, test_size=0.5, random_state=42)
+
+X_train, X_val_test, y_train, y_val_test = train_test_split(X, y, test_size=0.3, random_state=45)
+X_val, X_test, y_val, y_test = train_test_split(X_val_test, y_val_test, test_size=0.5, random_state=45)
 
 
 # Create a pipeline
@@ -656,18 +778,19 @@ pipeline = Pipeline([
 param_grid = [
     {
         'classifier': [LogisticRegression()],
-        'classifier__C': [0.1, 1, 10, 100],
+        'classifier__C': [0.1, 1, 10],
         'classifier__penalty': ['l2','l1'],
-        'classifier__solver': ['liblinear','lbfgs']
+        'classifier__solver': ['liblinear']
     },
     {
         'classifier': [RandomForestClassifier()],
-        'classifier__n_estimators': [50, 100, 200],
-        'classifier__max_depth': [None, 20, 50, 100],
+        'classifier__n_estimators': [10,20, 50, 100],
+        'classifier__max_depth': [None, 1,10,20,50,80,100],
+        'classifier__min_samples_split': [10,50,100]
     },
     {
         'classifier': [DummyClassifier()],
-        'classifier__strategy': ['most_frequent']
+        'classifier__strategy': ['most_frequent','uniform']
     },
     {
         'classifier': [MultinomialNB()]
@@ -680,6 +803,86 @@ grid_search.fit(X_train, y_train)
 
 # Print the best combination of hyperparameters
 print("Best parameters: ", grid_search.best_params_)
+
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
+
+# Define the models and their parameters
+models = [
+    {
+     'name': 'Random Forest',
+     'params': {'classifier': RandomForestClassifier(max_depth=50, min_samples_split=10, n_estimators=20)}
+     },
+    {
+     'name': 'Logistic Regression',
+     'params': {'classifier': LogisticRegression(C=10, penalty='l1', solver='liblinear')}
+     },
+    {
+     'name': 'Dummy Classifier',
+     'params': {'classifier': DummyClassifier(strategy='uniform')}
+     },
+    {
+     'name': 'MultinomialNB',
+     'params': {'classifier': MultinomialNB()}
+     }
+]
+
+
+# Split the data into train, validation, and test sets
+X_train, X_val_test, y_train, y_val_test = train_test_split(X, y, test_size=0.3, random_state=42)
+X_val, X_test, y_val, y_test = train_test_split(X_val_test, y_val_test, test_size=0.5, random_state=42)
+
+
+
+# Create a pandas DataFrame to store the results
+results_df = pd.DataFrame(columns=['Model', 'Set', 'Accuracy', 'Precision', 'Recall', 'F1-score'])
+
+
+
+# Function to evaluate a model and store the results in the DataFrame
+def evaluate_model(model_name, model, X, y, set_name):
+    y_pred = model.predict(X)
+    accuracy = accuracy_score(y, y_pred)
+    precision = precision_score(y, y_pred)
+    recall = recall_score(y, y_pred)
+    f1 = f1_score(y, y_pred)
+
+    results_df.loc[len(results_df)] = [model_name, set_name, accuracy, precision, recall, f1]
+
+
+
+# Iterate over each model and evaluate them on the train, validation, and test sets
+for model_info in models:
+    model_name = model_info['name']
+    model_params = model_info['params']
+    model = model_params['classifier']
+
+    # Train the model
+    model.fit(X_train, y_train)
+
+    # Evaluate on the train set
+    evaluate_model(model_name, model, X_train, y_train, 'Train')
+
+    # Evaluate on the validation set
+    evaluate_model(model_name, model, X_val, y_val, 'Validation')
+
+    # Evaluate on the test set
+    evaluate_model(model_name, model, X_test, y_test, 'Test')
+
+
+
+# Print the results
+print(results_df)
+
+
+
+
+
+
+
+
+
+
+
 
 # Evaluate the model on Train data
 y_train_pred = grid_search.predict(X_train)
@@ -732,18 +935,19 @@ print(best_params_df)
 
 best_estimator = grid_search.best_estimator_
 print(best_estimator.named_steps['classifier'])
+index=X.columns
 
 # Extract the feature importances from the Random Forest Classifier
 if isinstance(best_estimator.named_steps['classifier'], RandomForestClassifier):
     rf = best_estimator.named_steps['classifier']
-    feature_importances = pd.Series(rf.feature_importances_, index=best_estimator.named_steps['tfidf'].get_feature_names_out())
+    feature_importances = pd.Series(rf.feature_importances_, index=X.columns)
     feature_importances.nlargest(20).plot(kind='barh')
 
 if isinstance(best_estimator.named_steps['classifier'], LogisticRegression):
     lr = best_estimator.named_steps['classifier']
-    feature_importances = pd.Series(lr.coef_[0], index=best_estimator.named_steps['tfidf'].get_feature_names_out())
+    feature_importances = pd.Series(lr.coef_[0], index=X.columns)
     feature_importances.nlargest(20).plot(kind='barh')
-
+    
 if isinstance(best_estimator.named_steps['classifier'], MultinomialNB):
     nb = best_estimator.named_steps['classifier']
     feature_probabilities = pd.DataFrame(nb.feature_log_prob_.T, columns=['class_0', 'class_1'], index=best_estimator.named_steps['tfidf'].get_feature_names_out())
@@ -754,5 +958,148 @@ if isinstance(best_estimator.named_steps['classifier'], DummyClassifier):
     feature_importances = pd.Series([1], index=['dummy'])
     feature_importances.plot(kind='barh')
     
+
     
+
+
+
+
+#------------------------------------------------------ Plot for paper with text ---------------------------------------------------#
+    
+# Your text_normalizer function here...
+# Split the data into training, validation, and testing sets
+X = dataset["abstract"]
+y = dataset["is_ai_generated"]
+
+X_train, X_val_test, y_train, y_val_test = train_test_split(X, y, test_size=0.3, random_state=42)
+X_val, X_test, y_val, y_test = train_test_split(X_val_test, y_val_test, test_size=0.5, random_state=42)
+
+
+# Create a pipeline
+pipeline = Pipeline([
+    ('text_normalizer', FunctionTransformer(text_normalizer, validate=False)),
+    ('tfidf', TfidfVectorizer()),
+    ('classifier', LogisticRegression())
+])
+
+
+# Define your logistic regression parameters here:
+logistic_params = {
+    'classifier__C': 0.1,       # For example
+    'classifier__penalty': 'l2',
+    'classifier__solver': 'liblinear'
+}
+
+
+# Set the parameters in your classifier
+pipeline.set_params(**logistic_params)
+
+# Train the model
+pipeline.fit(X_train, y_train)
+
+# Predict the classes and probabilities on the test set
+y_pred = pipeline.predict(X_test)
+y_pred_proba = pipeline.predict_proba(X_test)
+
+# Evaluate the model
+print("Test Classification Report:\n", classification_report(y_test, y_pred))
+
+# If you want to extract feature importances for Logistic Regression
+lr = pipeline.named_steps['classifier']
+feature_importances = pd.Series(lr.coef_[0], index=pipeline.named_steps['tfidf'].get_feature_names_out())
+feature_importances.nlargest(20).plot(kind='barh')
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Split the data into train, validation, and test sets
+X_train, X_val_test, y_train, y_val_test = train_test_split(X, y, test_size=0.3, random_state=42)
+X_val, X_test, y_val, y_test = train_test_split(X_val_test, y_val_test, test_size=0.5, random_state=42)
+
+# Create separate test sets for AI and human-generated texts
+X_test_ai = X_test[y_test == 1]
+X_test_human = X_test[y_test == 0]
+
+# Predict probabilities using the pipeline for each set
+y_pred_proba_ai = pipeline.predict_proba(X_test_ai)[:, 1]
+y_pred_proba_human = pipeline.predict_proba(X_test_human)[:, 1]
+
+# Create random noise
+noise_ai = np.random.normal(1, 0.1, len(y_pred_proba_ai))
+noise_human = np.random.normal(0, 0.10, len(y_pred_proba_human))
+
+# Prepare data for the plot
+ai_df = pd.DataFrame({'Generated By': noise_ai, 'Probability': y_pred_proba_ai})  # 1 for AI
+human_df = pd.DataFrame({'Generated By': noise_human, 'Probability': y_pred_proba_human})  # 0 for Human
+
+# Concatenate the dataframes
+plot_df = pd.concat([ai_df, human_df])
+
+# Generate plot
+plt.figure(figsize=(10, 6))
+plt.scatter(plot_df['Generated By'], plot_df['Probability'], c=plot_df['Generated By'], alpha=0.5, cmap='viridis')
+
+plt.title('Prediction Probabilities for AI vs. Human Generated Text')
+plt.xlabel('Generated By (1=AI, 0=Human)')
+plt.ylabel('Probability')
+plt.xticks([0, 1])  # Ensuring only 0 and 1 are shown on the x-axis
+plt.show()
+
+
+
+#------------------------------------------------------ Plot for paper without text ---------------------------------------------------#
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Split the data into train, validation, and test sets
+X_train, X_val_test, y_train, y_val_test = train_test_split(X, y, test_size=0.3, random_state=42)
+X_val, X_test, y_val, y_test = train_test_split(X_val_test, y_val_test, test_size=0.5, random_state=42)
+
+# Create separate test sets for AI and human-generated texts
+X_test_ai = X_test[y_test == 1]
+X_test_human = X_test[y_test == 0]
+
+# Predict probabilities using the pipeline for each set
+y_pred_proba_ai = grid_search.best_estimator_.predict_proba(X_test_ai)[:, 1]
+y_pred_proba_human = grid_search.best_estimator_.predict_proba(X_test_human)[:, 1]
+
+# Create random noise
+noise_ai = np.random.normal(1, 0.1, len(y_pred_proba_ai))
+noise_human = np.random.normal(0, 0.10, len(y_pred_proba_human))
+
+# Prepare data for the plot
+ai_df = pd.DataFrame({'Generated By': noise_ai, 'Probability': y_pred_proba_ai})  # 1 for AI
+human_df = pd.DataFrame({'Generated By': noise_human, 'Probability': y_pred_proba_human})  # 0 for Human
+
+# Concatenate the dataframes
+plot_df = pd.concat([ai_df, human_df])
+
+# Generate plot
+plt.figure(figsize=(10, 6))
+plt.scatter(plot_df['Generated By'], plot_df['Probability'], c=plot_df['Generated By'], alpha=0.5, cmap='viridis')
+
+plt.title('Prediction Probabilities for AI vs. Human Generated Text')
+plt.xlabel('Generated By (1=AI, 0=Human)')
+plt.ylabel('Probability')
+plt.xticks([0, 1])  # Ensuring only 0 and 1 are shown on the x-axis
+plt.show()
+
+
+
+
+
+
+
+
+
     
