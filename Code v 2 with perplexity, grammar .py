@@ -5,30 +5,22 @@ Created on Sun Apr 30 14:24:59 2023
 @author: chris
 """
 
-#import os 
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
-#from sklearn.metrics import precision_score, accuracy_score, confusion_matrix
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 import torch
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
-
 import seaborn as sns
 import matplotlib.pyplot as plt
-
-
 from collections import Counter
 from nltk.util import ngrams
 from nltk.tokenize import word_tokenize
-#import nltk
-#nltk.download('punkt')
 
 
 # Read dataset
-
 dataset1 = pd.read_pickle("data_seperated_gbt1.pkl")
 dataset2 = pd.read_pickle("data_seperated_gbt2.pkl")
 dataset3 = pd.read_pickle("data_seperated_gbt3.pkl")
@@ -40,7 +32,7 @@ dataset8 = pd.read_pickle("data_seperated_gbt8.pkl")
 dataset9 = pd.read_pickle("data_seperated_gbt9.pkl")
 dataset10 = pd.read_pickle("data_seperated_gbt10.pkl")
 
-
+# Merge dataset
 DatasetBig = pd.concat([dataset1, dataset2, dataset3, dataset4, dataset5, dataset6, dataset7, dataset8, dataset9, dataset10],ignore_index=True)
 
 
@@ -50,22 +42,11 @@ dataset = DatasetBig.drop(['update_date',], axis=1)
 # Create a binary label for AI text (1) and human text (0)
 dataset["is_ai_generated"] = dataset["ai_generated"].apply(lambda x: 1 if x else 0)
 
-## DROP alt under 20 ord? 
-## DROP alt som indeholder "no abstract" "withdrawn" 
-## DATA CLEANING THROUGHTS 
-
-
-
 removed1 = dataset[dataset['abstract'].str.contains('Unfortunately',regex=False) & dataset["ai_generated"] == 1]
 dataset = dataset.drop(removed1.index)
 
 removed2 = dataset[dataset['abstract'].str.len() < 500]
 dataset = dataset.drop(removed2.index)
-
-## maybe remove citations for human generated (et al)
-## maybe remove $ and ^ if there are more than 5 in the text 
-## Maybe remove = if there are more than 3 in the text 
-## Consideration: we are using one chatbot to guess what the next word will be, there  might be a correlation between the two chatbots
 
 
 #------------------------------------------ Perplexity ----------------------------------------------------#
@@ -126,8 +107,6 @@ plt.show()
 
 
 #---------------------------------- Statistics -------------------------------------------#
-## Remove . and , 
-## Stopwords (maybe)
 
 def ngram_distribution(texts, max_ngram_length):
     all_ngrams = []
@@ -264,8 +243,6 @@ plt.show()
 ##TTR is the ratio obtained by dividing the types (the total number of different words) 
 ##occurring in a text or utterance by its tokens (the total number of words). 
 ##A high TTR indicates a high degree of lexical variation while a low TTR indicates the opposite.
-##
-##
 
 
 
@@ -432,32 +409,22 @@ from sklearn.naive_bayes import MultinomialNB
 import string
 import re
 from nltk.corpus import stopwords
-#nltk.download('stopwords')
 from nltk.stem import WordNetLemmatizer
-#nltk.download('wordnet')
-#nltk.download('omw-1.4')
+
 
 
 # Function for text normalization
-def text_normalizer(texts, lemmatize=True, remove_stopwords=True, remove_digits=True, remove_common=True):
-    # Initialize lemmatizer and stopwords
-    #lemmatizer = WordNetLemmatizer()
-    #stop_words = set(stopwords.words('english'))
+def text_normalizer(texts, remove_stopwords=True, remove_digits=True, remove_common=True):
     custom_stopwords = ['a', 'an', 'the', 'and', 'or', 'but', 'if', 'because', 'as', 'what', 'when', 'where', 'how', 'why', 'which', 'who', 'whom', 'this', 'that', 'these', 'those', 'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing', 'will', 'would', 'should', 'can', 'could', 'may', 'might', 'must', 'ought', 'i', 'you', 'he', 'she', 'it', 'we', 'they']
     normalized_texts = []
     for text in texts:
         # Convert to lowercase
         text = text.lower()
-        
         # Remove punctuation
         text = text.translate(str.maketrans('', '', string.punctuation))
         # Remove digits
         if remove_digits:
             text = re.sub(r'\d+', '', text)
-        # Lemmatize
-       # if lemmatize:
-        #    text = ' '.join([lemmatizer.lemmatize(word) for word in text.split()])
-        # Remove stopwords
         if remove_stopwords:
             words = text.split()
             text = ' '.join([word for word in words if word not in custom_stopwords])
@@ -530,76 +497,6 @@ grid_search.fit(X_train, y_train)
 # Print the best combination of hyperparameters
 print("Best parameters: ", grid_search.best_params_)
 
-from sklearn.metrics import precision_score, recall_score, accuracy_score, f1_score
-# Define the models and their parameters
-models = [
-    {
-     'name': 'Random Forest',
-     'params': {'classifier': RandomForestClassifier(max_depth=None, min_samples_split=10, n_estimators=50),'tfidf__ngram_range': (5, 6),'tfidf__max_df': 0.9 }
-     },
-    {
-     'name': 'Logistic Regression',
-     'params': {'classifier': LogisticRegression(C=0.1, penalty='l1', solver='liblinear'),'tfidf__ngram_range': (5, 6),'tfidf__max_df': 0.9}
-     },
-    {
-     'name': 'Dummy Classifier',
-     'params': {'classifier': DummyClassifier(strategy='uniform')}
-     },
-    {
-     'name': 'MultinomialNB',
-     'params': {'classifier': MultinomialNB(),'tfidf__ngram_range': (6, 7),'tfidf__max_df': 0.9}
-     }
-]
-
-# Import additional modules
-from sklearn.base import clone
-
-# Get the best configurations for each model from the grid search
-best_params = grid_search.cv_results_['params'][grid_search.best_index_]
-
-# Split the data into train, validation, and test sets
-X_train, X_val_test, y_train, y_val_test = train_test_split(X, y, test_size=0.3, random_state=42)
-X_val, X_test, y_val, y_test = train_test_split(X_val_test, y_val_test, test_size=0.5, random_state=42)
-
-# Create a pandas DataFrame to store the results
-results_df = pd.DataFrame(columns=['Model', 'Set', 'Accuracy', 'Precision', 'Recall', 'F1-score'])
-
-# Function to evaluate a model and store the results in the DataFrame
-def evaluate_model(model_name, model, X, y, set_name):
-    y_pred = model.predict(X)
-    accuracy = accuracy_score(y, y_pred)
-    precision = precision_score(y, y_pred)
-    recall = recall_score(y, y_pred)
-    f1 = f1_score(y, y_pred)
-
-    results_df.loc[len(results_df)] = [model_name, set_name, accuracy, precision, recall, f1]
-
-# Iterate over each model and evaluate them on the train, validation, and test sets
-for model_info in models:
-    model_name = model_info['name']
-    model_params = best_params[model_name] if model_name in best_params else {}
-
-    pipeline = Pipeline([
-        ('text_normalizer', FunctionTransformer(text_normalizer, validate=False)),
-        ('tfidf', TfidfVectorizer(max_df=model_params.get('tfidf__max_df', 1.0), 
-                                  ngram_range=model_params.get('tfidf__ngram_range', (1,1)))),
-        ('classifier', clone(model_info['params']['classifier']).set_params(**model_params))
-    ])
-
-    # Train the model
-    pipeline.fit(X_train, y_train)
-
-    # Evaluate on the train set
-    evaluate_model(model_name, pipeline, X_train, y_train, 'Train')
-
-    # Evaluate on the validation set
-    evaluate_model(model_name, pipeline, X_val, y_val, 'Validation')
-
-    # Evaluate on the test set
-    evaluate_model(model_name, pipeline, X_test, y_test, 'Test')
-
-# Print the results
-print(results_df)
 
 
 
@@ -726,6 +623,76 @@ if isinstance(best_estimator.named_steps['classifier'], DummyClassifier):
     feature_importances.plot(kind='barh')
     
     
+from sklearn.metrics import precision_score, recall_score, accuracy_score, f1_score
+# Define the models and their parameters
+models = [
+    {
+     'name': 'Random Forest',
+     'params': {'classifier': RandomForestClassifier(max_depth=None, min_samples_split=10, n_estimators=50),'tfidf__ngram_range': (5, 6),'tfidf__max_df': 0.9 }
+     },
+    {
+     'name': 'Logistic Regression',
+     'params': {'classifier': LogisticRegression(C=0.1, penalty='l1', solver='liblinear'),'tfidf__ngram_range': (5, 6),'tfidf__max_df': 0.9}
+     },
+    {
+     'name': 'Dummy Classifier',
+     'params': {'classifier': DummyClassifier(strategy='uniform')}
+     },
+    {
+     'name': 'MultinomialNB',
+     'params': {'classifier': MultinomialNB(),'tfidf__ngram_range': (6, 7),'tfidf__max_df': 0.9}
+     }
+]
+
+# Import additional modules
+from sklearn.base import clone
+
+# Get the best configurations for each model from the grid search
+best_params = grid_search.cv_results_['params'][grid_search.best_index_]
+
+# Split the data into train, validation, and test sets
+X_train, X_val_test, y_train, y_val_test = train_test_split(X, y, test_size=0.3, random_state=42)
+X_val, X_test, y_val, y_test = train_test_split(X_val_test, y_val_test, test_size=0.5, random_state=42)
+
+# Create a pandas DataFrame to store the results
+results_df = pd.DataFrame(columns=['Model', 'Set', 'Accuracy', 'Precision', 'Recall', 'F1-score'])
+
+# Function to evaluate a model and store the results in the DataFrame
+def evaluate_model(model_name, model, X, y, set_name):
+    y_pred = model.predict(X)
+    accuracy = accuracy_score(y, y_pred)
+    precision = precision_score(y, y_pred)
+    recall = recall_score(y, y_pred)
+    f1 = f1_score(y, y_pred)
+
+    results_df.loc[len(results_df)] = [model_name, set_name, accuracy, precision, recall, f1]
+
+# Iterate over each model and evaluate them on the train, validation, and test sets
+for model_info in models:
+    model_name = model_info['name']
+    model_params = best_params[model_name] if model_name in best_params else {}
+
+    pipeline = Pipeline([
+        ('text_normalizer', FunctionTransformer(text_normalizer, validate=False)),
+        ('tfidf', TfidfVectorizer(max_df=model_params.get('tfidf__max_df', 1.0), 
+                                  ngram_range=model_params.get('tfidf__ngram_range', (1,1)))),
+        ('classifier', clone(model_info['params']['classifier']).set_params(**model_params))
+    ])
+
+    # Train the model
+    pipeline.fit(X_train, y_train)
+
+    # Evaluate on the train set
+    evaluate_model(model_name, pipeline, X_train, y_train, 'Train')
+
+    # Evaluate on the validation set
+    evaluate_model(model_name, pipeline, X_val, y_val, 'Validation')
+
+    # Evaluate on the test set
+    evaluate_model(model_name, pipeline, X_test, y_test, 'Test')
+
+# Print the results
+print(results_df)
 
 
 #------------------------------------------------------ Modelling without text---------------------------------------------------#
@@ -745,12 +712,7 @@ from sklearn.naive_bayes import MultinomialNB
 import string
 import re
 from nltk.corpus import stopwords
-#nltk.download('stopwords')
 from nltk.stem import WordNetLemmatizer
-#nltk.download('wordnet')
-#nltk.download('omw-1.4')
-
-
 
 # Split the data into training, validation, and testing sets
 X = dataset_with_perplexity[['frequency_of_function_words', 'Average word length', 'TTR_1ngram','TTR_2ngram','TTR_3ngram', 'Grammar Score', 'Perplexity']]
@@ -804,74 +766,6 @@ grid_search.fit(X_train, y_train)
 # Print the best combination of hyperparameters
 print("Best parameters: ", grid_search.best_params_)
 
-from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
-
-# Define the models and their parameters
-models = [
-    {
-     'name': 'Random Forest',
-     'params': {'classifier': RandomForestClassifier(max_depth=50, min_samples_split=10, n_estimators=20)}
-     },
-    {
-     'name': 'Logistic Regression',
-     'params': {'classifier': LogisticRegression(C=10, penalty='l1', solver='liblinear')}
-     },
-    {
-     'name': 'Dummy Classifier',
-     'params': {'classifier': DummyClassifier(strategy='uniform')}
-     },
-    {
-     'name': 'MultinomialNB',
-     'params': {'classifier': MultinomialNB()}
-     }
-]
-
-
-# Split the data into train, validation, and test sets
-X_train, X_val_test, y_train, y_val_test = train_test_split(X, y, test_size=0.3, random_state=42)
-X_val, X_test, y_val, y_test = train_test_split(X_val_test, y_val_test, test_size=0.5, random_state=42)
-
-
-
-# Create a pandas DataFrame to store the results
-results_df = pd.DataFrame(columns=['Model', 'Set', 'Accuracy', 'Precision', 'Recall', 'F1-score'])
-
-
-
-# Function to evaluate a model and store the results in the DataFrame
-def evaluate_model(model_name, model, X, y, set_name):
-    y_pred = model.predict(X)
-    accuracy = accuracy_score(y, y_pred)
-    precision = precision_score(y, y_pred)
-    recall = recall_score(y, y_pred)
-    f1 = f1_score(y, y_pred)
-
-    results_df.loc[len(results_df)] = [model_name, set_name, accuracy, precision, recall, f1]
-
-
-
-# Iterate over each model and evaluate them on the train, validation, and test sets
-for model_info in models:
-    model_name = model_info['name']
-    model_params = model_info['params']
-    model = model_params['classifier']
-
-    # Train the model
-    model.fit(X_train, y_train)
-
-    # Evaluate on the train set
-    evaluate_model(model_name, model, X_train, y_train, 'Train')
-
-    # Evaluate on the validation set
-    evaluate_model(model_name, model, X_val, y_val, 'Validation')
-
-    # Evaluate on the test set
-    evaluate_model(model_name, model, X_test, y_test, 'Test')
-
-
-
-# Print the results
-print(results_df)
 
 
 
@@ -959,10 +853,75 @@ if isinstance(best_estimator.named_steps['classifier'], DummyClassifier):
     feature_importances.plot(kind='barh')
     
 
-    
+
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
+
+# Define the models and their parameters
+models = [
+    {
+     'name': 'Random Forest',
+     'params': {'classifier': RandomForestClassifier(max_depth=50, min_samples_split=10, n_estimators=20)}
+     },
+    {
+     'name': 'Logistic Regression',
+     'params': {'classifier': LogisticRegression(C=10, penalty='l1', solver='liblinear')}
+     },
+    {
+     'name': 'Dummy Classifier',
+     'params': {'classifier': DummyClassifier(strategy='uniform')}
+     },
+    {
+     'name': 'MultinomialNB',
+     'params': {'classifier': MultinomialNB()}
+     }
+]
+
+
+# Split the data into train, validation, and test sets
+X_train, X_val_test, y_train, y_val_test = train_test_split(X, y, test_size=0.3, random_state=42)
+X_val, X_test, y_val, y_test = train_test_split(X_val_test, y_val_test, test_size=0.5, random_state=42)
 
 
 
+# Create a pandas DataFrame to store the results
+results_df = pd.DataFrame(columns=['Model', 'Set', 'Accuracy', 'Precision', 'Recall', 'F1-score'])
+
+
+
+# Function to evaluate a model and store the results in the DataFrame
+def evaluate_model(model_name, model, X, y, set_name):
+    y_pred = model.predict(X)
+    accuracy = accuracy_score(y, y_pred)
+    precision = precision_score(y, y_pred)
+    recall = recall_score(y, y_pred)
+    f1 = f1_score(y, y_pred)
+
+    results_df.loc[len(results_df)] = [model_name, set_name, accuracy, precision, recall, f1]
+
+
+
+# Iterate over each model and evaluate them on the train, validation, and test sets
+for model_info in models:
+    model_name = model_info['name']
+    model_params = model_info['params']
+    model = model_params['classifier']
+
+    # Train the model
+    model.fit(X_train, y_train)
+
+    # Evaluate on the train set
+    evaluate_model(model_name, model, X_train, y_train, 'Train')
+
+    # Evaluate on the validation set
+    evaluate_model(model_name, model, X_val, y_val, 'Validation')
+
+    # Evaluate on the test set
+    evaluate_model(model_name, model, X_test, y_test, 'Test')
+
+
+
+# Print the results
+print(results_df)    
 
 #------------------------------------------------------ Plot for paper with text ---------------------------------------------------#
     
