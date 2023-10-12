@@ -19,7 +19,7 @@ import os
 import openai
 import time
 
-openai.api_key = "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"
+openai.api_key = "#################################"
 
 df_big = pd.read_json('arxiv-metadata-oai-snapshot.json', lines=True, nrows=10000)
 
