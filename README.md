@@ -1,1 +1,2 @@
-# AI-ML-MASTER-2SEM
+Detecting AI Authorship: Analyzing Descriptive Features for AI Detection
+
